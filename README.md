@@ -321,6 +321,18 @@ docker compose down
 docker compose down -v
 ```
 
+## External Access (Optional)
+
+To expose the OpenSearch search API for external AI agents:
+
+1. Configure Nginx reverse proxy using the example in `nginx/rocketchat-proxy.conf.example`
+2. See [docs/NGINX_SETUP.md](docs/NGINX_SETUP.md) for detailed instructions
+
+After setup, AI agents can use:
+```
+ROCKETCHAT_URL=https://your-domain.com/mcp-api
+```
+
 ## License
 
 MIT License

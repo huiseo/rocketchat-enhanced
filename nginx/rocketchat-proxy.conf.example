@@ -1,0 +1,100 @@
+# RocketChat Enhanced - Nginx Reverse Proxy Configuration
+#
+# This configuration enables:
+# - HTTPS termination for RocketChat
+# - OpenSearch-powered search API via /mcp-api/ path
+# - WebSocket support for real-time messaging
+#
+# Usage:
+# 1. Copy this file: cp rocketchat-proxy.conf.example /etc/nginx/sites-available/rocketchat
+# 2. Update YOUR_DOMAIN, SSL paths, and ports
+# 3. Enable: ln -s /etc/nginx/sites-available/rocketchat /etc/nginx/sites-enabled/
+# 4. Test: nginx -t
+# 5. Reload: systemctl reload nginx
+
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    server_name YOUR_DOMAIN;
+
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+# HTTPS server
+server {
+    listen 443 ssl http2;
+    server_name YOUR_DOMAIN;
+
+    # SSL certificates (update paths)
+    ssl_certificate /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+
+    # SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # ===========================================
+    # MCP Proxy API (OpenSearch Search)
+    # ===========================================
+
+    # /mcp-api/ path for full MCP Proxy access
+    # Example: https://YOUR_DOMAIN/mcp-api/health
+    #          https://YOUR_DOMAIN/mcp-api/api/v1/chat.search
+    location /mcp-api/ {
+        rewrite ^/mcp-api/(.*) /$1 break;
+        proxy_pass http://127.0.0.1:3005;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Auth-Token $http_x_auth_token;
+        proxy_set_header X-User-Id $http_x_user_id;
+    }
+
+    # Direct API override (optional - for backward compatibility)
+    # Routes search requests directly to OpenSearch proxy
+    location = /api/v1/chat.search {
+        proxy_pass http://127.0.0.1:3005;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Auth-Token $http_x_auth_token;
+        proxy_set_header X-User-Id $http_x_user_id;
+    }
+
+    location = /api/v1/channels.list {
+        proxy_pass http://127.0.0.1:3005;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Auth-Token $http_x_auth_token;
+        proxy_set_header X-User-Id $http_x_user_id;
+    }
+
+    # ===========================================
+    # RocketChat (Default)
+    # ===========================================
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Nginx-Proxy true;
+        proxy_redirect off;
+
+        # WebSocket timeout
+        proxy_read_timeout 86400;
+    }
+}
