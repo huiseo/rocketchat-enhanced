@@ -403,6 +403,15 @@ app.post('/mcp/execute', authMiddleware, async (req, res) => {
 async function mcpSearchMessages(args) {
   const { query, channel, author, from_date, to_date, limit = 20 } = args;
 
+  // Debug logging
+  console.log('[MCP search_messages] args:', JSON.stringify(args));
+  console.log('[MCP search_messages] query:', query, 'type:', typeof query);
+
+  if (!query || query.trim() === '') {
+    console.warn('[MCP search_messages] Empty query received');
+    return { total: 0, messages: [], error: 'Query is required' };
+  }
+
   const must = [{ match: { text: query } }];
   if (channel) must.push({ term: { channel_name: channel } });
   if (author) must.push({ term: { author_username: author } });
@@ -415,6 +424,8 @@ async function mcpSearchMessages(args) {
     filter.push({ range: { timestamp: range } });
   }
 
+  console.log('[MCP search_messages] OpenSearch query:', JSON.stringify({ bool: { must, filter } }));
+
   const response = await osClient.search({
     index: INDEX_NAME,
     body: {
@@ -424,6 +435,8 @@ async function mcpSearchMessages(args) {
       size: limit
     }
   });
+
+  console.log('[MCP search_messages] Results:', response.body.hits.total.value);
 
   return {
     total: response.body.hits.total.value,
