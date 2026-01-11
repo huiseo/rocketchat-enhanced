@@ -1,0 +1,20 @@
+{
+  "name": "rocketchat-realtime-sync",
+  "version": "1.0.0",
+  "description": "Realtime message sync from RocketChat to OpenSearch",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "bootstrap": "node src/bootstrap.js"
+  },
+  "dependencies": {
+    "@opensearch-project/opensearch": "^2.5.0",
+    "axios": "^1.6.5",
+    "dotenv": "^16.4.0",
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

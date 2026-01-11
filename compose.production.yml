@@ -1,0 +1,134 @@
+# RocketChat Enhanced - Production Ready (Pre-built Images)
+#
+# Installation:
+#   curl -O https://raw.githubusercontent.com/huiseo/rocketchat-enhanced/main/compose.production.yml
+#   mv compose.production.yml compose.yml
+#   docker compose up -d
+#
+# Environment variables:
+#   export ROOT_URL=http://your-server:3000
+#   docker compose up -d
+#
+# Or create .env file:
+#   echo "ROOT_URL=http://your-server:3000" > .env
+#   docker compose up -d
+
+services:
+  # ============================================
+  # RocketChat (Official Image)
+  # ============================================
+  rocketchat:
+    image: rocketchat/rocket.chat:${RELEASE:-7.5.0}
+    restart: unless-stopped
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/rocketchat?replicaSet=rs0
+      - MONGO_OPLOG_URL=mongodb://mongodb:27017/local?replicaSet=rs0
+      - ROOT_URL=${ROOT_URL:-http://localhost:3000}
+      - PORT=3000
+      - DEPLOY_METHOD=docker
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - rocketchat_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/info').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================
+  # MongoDB
+  # ============================================
+  mongodb:
+    image: mongo:${MONGO_VERSION:-7.0}
+    restart: unless-stopped
+    command: mongod --replSet rs0 --oplogSize 128
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: |
+        mongosh --quiet --eval "
+          try { rs.status().ok && quit(0) }
+          catch(e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongodb:27017'}]}); quit(1) }
+        "
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ============================================
+  # OpenSearch (Search Engine)
+  # ============================================
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================
+  # Search Proxy (Pre-built Image)
+  # ============================================
+  search-proxy:
+    image: ghcr.io/${GITHUB_OWNER:-huiseo}/rocketchat-search-proxy:${VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - OPENSEARCH_URL=http://opensearch:9200
+      - ROCKETCHAT_URL=http://rocketchat:3000
+      - PORT=3005
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      rocketchat:
+        condition: service_healthy
+    ports:
+      - "${PROXY_PORT:-3005}:3005"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Realtime Sync (Pre-built Image)
+  # ============================================
+  realtime-sync:
+    image: ghcr.io/${GITHUB_OWNER:-huiseo}/rocketchat-realtime-sync:${VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - ROCKETCHAT_WS_URL=ws://rocketchat:3000/websocket
+      - ROCKETCHAT_USER=${ADMIN_USER:-admin}
+      - ROCKETCHAT_PASSWORD=${ADMIN_PASSWORD}
+      - OPENSEARCH_URL=http://opensearch:9200
+      - ROOT_URL=${ROOT_URL:-http://localhost:3000}
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      rocketchat:
+        condition: service_healthy
+
+volumes:
+  rocketchat_uploads:
+  mongodb_data:
+  opensearch_data:

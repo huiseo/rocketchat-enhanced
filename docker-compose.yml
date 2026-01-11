@@ -1,0 +1,183 @@
+# RocketChat Enhanced - OpenSearch Search Extension
+#
+# Features:
+#   - RocketChat (Official Image)
+#   - MongoDB (Official Image)
+#   - OpenSearch (Full-text Search Engine)
+#   - Search Proxy (Enhanced Search API)
+#   - Realtime Sync (Real-time Message Indexing)
+#
+# Usage:
+#   1. cp .env.example .env
+#   2. Edit .env file
+#   3. docker compose up -d
+#   4. After initial setup: ./scripts/setup.sh
+#
+# For details: See README.md
+
+services:
+  # ============================================
+  # RocketChat Core
+  # ============================================
+  rocketchat:
+    image: rocketchat/rocket.chat:${RELEASE:-7.5.0}
+    container_name: rocketchat
+    restart: unless-stopped
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017/rocketchat?replicaSet=rs0
+      - MONGO_OPLOG_URL=mongodb://mongodb:27017/local?replicaSet=rs0
+      - ROOT_URL=${ROOT_URL:-http://localhost:3000}
+      - PORT=3000
+      - DEPLOY_METHOD=docker
+      - DEPLOY_PLATFORM=
+      - MAIL_URL=${MAIL_URL:-}
+      - FROM_EMAIL=${FROM_EMAIL:-}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    networks:
+      - rocketchat-network
+    volumes:
+      - rocketchat-uploads:/app/uploads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rocketchat.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.rocketchat.entrypoints=https"
+      - "traefik.http.routers.rocketchat.tls=true"
+      - "traefik.http.routers.rocketchat.tls.certresolver=le"
+      - "traefik.http.services.rocketchat.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================
+  # MongoDB with Replica Set
+  # ============================================
+  mongodb:
+    image: mongo:${MONGODB_VERSION:-7.0}
+    container_name: mongodb
+    restart: unless-stopped
+    command: mongod --replSet rs0 --oplogSize 128
+    networks:
+      - rocketchat-network
+    volumes:
+      - mongodb-data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: |
+        mongosh --quiet --eval "
+          try {
+            var status = rs.status();
+            if (status.ok === 1) { quit(0); }
+            quit(1);
+          } catch (e) {
+            rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongodb:27017'}]});
+            quit(1);
+          }
+        "
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ============================================
+  # OpenSearch (Enhanced Search Engine)
+  # ============================================
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    container_name: opensearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      - rocketchat-network
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================
+  # Search Proxy (Enhanced API)
+  # ============================================
+  search-proxy:
+    build:
+      context: ./search-proxy
+      dockerfile: Dockerfile
+    container_name: search-proxy
+    restart: unless-stopped
+    environment:
+      - OPENSEARCH_URL=http://opensearch:9200
+      - ROCKETCHAT_URL=http://rocketchat:3000
+      - PORT=3005
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      rocketchat:
+        condition: service_healthy
+    networks:
+      - rocketchat-network
+    ports:
+      - "${PROXY_PORT:-3005}:3005"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================
+  # Realtime Sync (WebSocket Message Indexer)
+  # ============================================
+  realtime-sync:
+    build:
+      context: ./realtime-sync
+      dockerfile: Dockerfile
+    container_name: realtime-sync
+    restart: unless-stopped
+    environment:
+      - ROCKETCHAT_WS_URL=ws://rocketchat:3000/websocket
+      - ROCKETCHAT_USER=${ROCKETCHAT_ADMIN_USER:-admin}
+      - ROCKETCHAT_PASSWORD=${ROCKETCHAT_ADMIN_PASSWORD}
+      - OPENSEARCH_URL=http://opensearch:9200
+      - ROOT_URL=${ROOT_URL:-http://localhost:3000}
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      rocketchat:
+        condition: service_healthy
+    networks:
+      - rocketchat-network
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  rocketchat-network:
+    driver: bridge
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  rocketchat-uploads:
+  mongodb-data:
+  opensearch-data:

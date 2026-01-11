@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/rocketchat
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build and push search-proxy
+        uses: docker/build-push-action@v5
+        with:
+          context: ./search-proxy
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-search-proxy:${{ steps.version.outputs.VERSION }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-search-proxy:latest
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push realtime-sync
+        uses: docker/build-push-action@v5
+        with:
+          context: ./realtime-sync
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-realtime-sync:${{ steps.version.outputs.VERSION }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-realtime-sync:latest
+          platforms: linux/amd64,linux/arm64
+
+      - name: Generate release compose file
+        run: |
+          # Update compose.production.yml with version tags
+          sed "s|ghcr.io/your-org/rocketchat|${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}|g" compose.production.yml > compose-release.yml
+          sed -i "s|\${VERSION:-latest}|${{ steps.version.outputs.VERSION }}|g" compose-release.yml
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## RocketChat Enhanced v${{ steps.version.outputs.VERSION }}
+
+            ### Installation
+
+            **Method 1: One-click Install**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+            ```
+
+            **Method 2: Docker Compose**
+            ```bash
+            curl -LO https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/compose.yml
+            docker compose up -d
+            ```
+
+            ### Docker Images
+
+            - `${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-search-proxy:${{ steps.version.outputs.VERSION }}`
+            - `${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-realtime-sync:${{ steps.version.outputs.VERSION }}`
+
+            ### Changelog
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full changelog.
+          files: |
+            compose-release.yml
+            install.sh
+          draft: false
+          prerelease: false
