@@ -138,12 +138,48 @@ curl -X POST http://localhost:3000/api/v1/login \
 }
 ```
 
+### 중요: 한글 검색 시 URL 인코딩 필수
+
+한글, 일본어, 중국어 등 비ASCII 문자로 검색할 때는 **반드시 URL 인코딩**을 해야 합니다.
+
+```bash
+# 올바른 방법 - --data-urlencode 사용 (권장)
+curl -G --data-urlencode "searchText=회의" \
+  "http://localhost:3005/api/v1/chat.search" \
+  -H "X-Auth-Token: YOUR_AUTH_TOKEN" \
+  -H "X-User-Id: YOUR_USER_ID"
+
+# 잘못된 방법 - URL 인코딩 없음 (검색 실패)
+curl "http://localhost:3005/api/v1/chat.search?searchText=회의" \
+  -H "X-Auth-Token: YOUR_AUTH_TOKEN" \
+  -H "X-User-Id: YOUR_USER_ID"
+```
+
+프로그래밍 언어에서는 쿼리 파라미터 빌더를 사용하세요:
+
+```python
+# Python - 올바른 방법
+requests.get(url, params={"searchText": "회의"})
+
+# Python - 잘못된 방법
+requests.get(f"{url}?searchText=회의")
+```
+
+```javascript
+// JavaScript - 올바른 방법
+fetch(url + '?' + new URLSearchParams({searchText: '회의'}))
+
+// JavaScript - 잘못된 방법
+fetch(`${url}?searchText=회의`)
+```
+
 ### 전역 메시지 검색
 
 전체 워크스페이스에서 검색 (기본 RocketChat에서는 불가능):
 
 ```bash
-curl "http://localhost:3005/api/v1/chat.search?searchText=회의" \
+curl -G --data-urlencode "searchText=회의" \
+  "http://localhost:3005/api/v1/chat.search" \
   -H "X-Auth-Token: YOUR_AUTH_TOKEN" \
   -H "X-User-Id: YOUR_USER_ID"
 ```
@@ -151,7 +187,8 @@ curl "http://localhost:3005/api/v1/chat.search?searchText=회의" \
 ### 채널별 검색
 
 ```bash
-curl "http://localhost:3005/api/v1/chat.search?roomId=채널ID&searchText=프로젝트" \
+curl -G --data-urlencode "searchText=프로젝트" --data-urlencode "roomId=채널ID" \
+  "http://localhost:3005/api/v1/chat.search" \
   -H "X-Auth-Token: YOUR_AUTH_TOKEN" \
   -H "X-User-Id: YOUR_USER_ID"
 ```

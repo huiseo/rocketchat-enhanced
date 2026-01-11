@@ -138,12 +138,48 @@ Response:
 }
 ```
 
+### Important: URL Encoding for Non-ASCII Characters
+
+When searching with Korean, Japanese, Chinese, or other non-ASCII characters, **you must URL-encode the search text**.
+
+```bash
+# Correct - Using --data-urlencode (recommended)
+curl -G --data-urlencode "searchText=회의" \
+  "http://localhost:3005/api/v1/chat.search" \
+  -H "X-Auth-Token: YOUR_AUTH_TOKEN" \
+  -H "X-User-Id: YOUR_USER_ID"
+
+# Wrong - Without URL encoding (will fail)
+curl "http://localhost:3005/api/v1/chat.search?searchText=회의" \
+  -H "X-Auth-Token: YOUR_AUTH_TOKEN" \
+  -H "X-User-Id: YOUR_USER_ID"
+```
+
+For programmatic access, use your HTTP library's query parameter builder instead of string concatenation:
+
+```python
+# Python - Correct
+requests.get(url, params={"searchText": "회의"})
+
+# Python - Wrong
+requests.get(f"{url}?searchText=회의")
+```
+
+```javascript
+// JavaScript - Correct
+fetch(url + '?' + new URLSearchParams({searchText: '회의'}))
+
+// JavaScript - Wrong
+fetch(`${url}?searchText=회의`)
+```
+
 ### Global Message Search
 
 Search across the entire workspace (not possible in default RocketChat):
 
 ```bash
-curl "http://localhost:3005/api/v1/chat.search?searchText=meeting" \
+curl -G --data-urlencode "searchText=meeting" \
+  "http://localhost:3005/api/v1/chat.search" \
   -H "X-Auth-Token: YOUR_AUTH_TOKEN" \
   -H "X-User-Id: YOUR_USER_ID"
 ```
@@ -151,7 +187,8 @@ curl "http://localhost:3005/api/v1/chat.search?searchText=meeting" \
 ### Channel-specific Search
 
 ```bash
-curl "http://localhost:3005/api/v1/chat.search?roomId=CHANNEL_ID&searchText=project" \
+curl -G --data-urlencode "searchText=project" --data-urlencode "roomId=CHANNEL_ID" \
+  "http://localhost:3005/api/v1/chat.search" \
   -H "X-Auth-Token: YOUR_AUTH_TOKEN" \
   -H "X-User-Id: YOUR_USER_ID"
 ```

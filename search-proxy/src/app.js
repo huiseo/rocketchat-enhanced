@@ -332,11 +332,11 @@ app.get('/mcp/tools', authMiddleware, (req, res) => {
     tools: [
       {
         name: 'search_messages',
-        description: 'Search RocketChat messages with full-text search',
+        description: 'Search RocketChat messages with Korean language support. IMPORTANT: When making HTTP requests, you MUST URL-encode the query parameters. Use URLSearchParams in JavaScript or params dict in Python requests.',
         inputSchema: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: 'Search query' },
+            query: { type: 'string', description: 'Search query in Korean or English. MUST be URL-encoded when sent via HTTP query string.' },
             channel: { type: 'string', description: 'Filter by channel name' },
             author: { type: 'string', description: 'Filter by author username' },
             from_date: { type: 'string', description: 'Start date (ISO format)' },

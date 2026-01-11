@@ -61,10 +61,10 @@ services:
       start_period: 30s
 
   # ============================================
-  # OpenSearch (Search Engine)
+  # OpenSearch (with Korean Nori Analyzer)
   # ============================================
   opensearch:
-    image: opensearchproject/opensearch:2.11.1
+    image: ghcr.io/${GITHUB_OWNER:-huiseo}/rocketchat-opensearch:${VERSION:-latest}
     restart: unless-stopped
     environment:
       - discovery.type=single-node
