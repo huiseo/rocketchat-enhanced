@@ -32,23 +32,51 @@ async function ensureIndex() {
   try {
     const exists = await osClient.indices.exists({ index: INDEX_NAME });
     if (!exists.body) {
-      console.log('📦 Creating OpenSearch index...');
+      console.log('📦 Creating index with Korean analyzer (Nori)...');
       await osClient.indices.create({
         index: INDEX_NAME,
         body: {
           settings: {
             number_of_shards: 1,
-            number_of_replicas: 0
+            number_of_replicas: 0,
+            analysis: {
+              analyzer: {
+                korean_analyzer: {
+                  type: 'custom',
+                  tokenizer: 'nori_tokenizer',
+                  filter: ['nori_readingform', 'lowercase', 'nori_part_of_speech']
+                }
+              },
+              filter: {
+                nori_part_of_speech: {
+                  type: 'nori_part_of_speech',
+                  stoptags: ['E', 'IC', 'J', 'MAG', 'MAJ', 'MM', 'SP', 'SSC', 'SSO', 'SC', 'SE', 'XPN', 'XSA', 'XSN', 'XSV', 'UNA', 'NA', 'VSV']
+                }
+              }
+            }
           },
           mappings: {
             properties: {
               message_id: { type: 'keyword' },
               channel_id: { type: 'keyword' },
               channel_name: { type: 'keyword' },
-              text: { type: 'text', analyzer: 'standard' },
+              text: {
+                type: 'text',
+                analyzer: 'korean_analyzer',
+                search_analyzer: 'korean_analyzer',
+                fields: {
+                  raw: { type: 'keyword' }
+                }
+              },
               author_id: { type: 'keyword' },
               author_username: { type: 'keyword' },
-              author_name: { type: 'text' },
+              author_name: {
+                type: 'text',
+                analyzer: 'korean_analyzer',
+                fields: {
+                  raw: { type: 'keyword' }
+                }
+              },
               timestamp: { type: 'date' },
               thread_id: { type: 'keyword' },
               is_thread_reply: { type: 'boolean' },
@@ -57,7 +85,7 @@ async function ensureIndex() {
           }
         }
       });
-      console.log('✅ Index created');
+      console.log('✅ Index created with Korean analyzer');
     } else {
       console.log('✅ Index exists');
     }
